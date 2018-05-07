@@ -1,23 +1,10 @@
 <?
+require_once("../common.php");
 //$prefixes, $suffixes, $infixes
 require_once("./roots.php");
 
 $startTime = time();
 mt_srand($startTime);
-
-function searchArgs($string) {
-	global $argv;
-	for($i = 0; $i < count($argv); $i++) {
-		if($argv[$i] == $string) {
-			return true;
-		}
-	}
-	return false;
-}
-
-function pickRandom($input) {
-	return $input[rand(0,sizeof($input)-1)];
-}
 
 function generateWord() {
 	global $infixes, $prefixes, $suffixes;
@@ -47,18 +34,8 @@ if(searchArgs("test")) {
 	die();
 }
 
-require_once("../TwitterAPIExchange.php");
 
-$keys = json_decode(fread(fopen("fakewordskeys","r"),filesize("fakewordskeys")));
-
-$settings = array(
-	'oauth_access_token'        => $keys->access_token,
-	'oauth_access_token_secret' => $keys->access_token_secret,
-	'consumer_key'              => $keys->consumer_key,
-	'consumer_secret'           => $keys->consumer_secret
-);
-
-$twitter = new TwitterAPIExchange($settings);
+$twitter = twitterfromkeysfile("fakewords.json");
 $twitter_output = $twitter->buildOauth("https://api.twitter.com/1.1/statuses/update.json", "POST")
 	->setPostfields(array(
 		"status" => generateWord()

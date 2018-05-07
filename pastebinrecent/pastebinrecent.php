@@ -1,5 +1,5 @@
 <?php
-include_once("common.php");
+include_once("../common.php");
 
 $startTime = time();
 mt_srand($startTime);
@@ -160,21 +160,7 @@ if(searchArgs("notweet")) {
 	die();
 }
 
-require_once("TwitterAPIExchange.php");
-
-$keys = json_decode(fread(fopen("pastebinkeys","r"),filesize("pastebinkeys")));
-if($keys === NULL) {
-	fwrite($logfile, "json failed or is NULL!\n");
-}
-
-$settings = array(
-	'oauth_access_token'        => $keys->access_token,
-	'oauth_access_token_secret' => $keys->access_token_secret,
-	'consumer_key'              => $keys->consumer_key,
-	'consumer_secret'           => $keys->consumer_secret
-);
-
-$twitter = new TwitterAPIExchange($settings);
+$twitter = twitterfromkeysfile("pastebinrecent.json");
 $twitter_output = $twitter->buildOauth("https://api.twitter.com/1.1/statuses/update.json", "POST")
 	->setPostfields(array(
 		"status" => $status

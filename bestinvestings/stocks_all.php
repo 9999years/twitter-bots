@@ -1,4 +1,6 @@
 <?php
+require_once("../common.php");
+
 $tickers = array(
  "BKS3.F" => "BBS KRAFTFAHRZG VZ"
 ,"MHN.L" => "Menhaden Capital"

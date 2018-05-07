@@ -1,42 +1,13 @@
 <?php
 //worst practice style guide
 
-function u($hex) { //other funcs rely on this in the includes. fuck you
-	return json_decode("\"\\u" . $hex . "\"");
-}
-
 require_once("industries.php"); //includes $industries, a list of ~280 industries
 require_once("stocks_all.php"); //includes $tickers, symbol=>company. alt is tickers.php
 require_once("adverbs.php"); //includes $adverbs, a list of adverbs
 require_once("adjectives.php"); //...you get the deal
 require_once("investvars.php");
 
-function pickRandom($input) {
-	return $input[rand(0,sizeof($input)-1)];
-}
-
-/*
- *function randomHex($length) {
- *    $result = "";
- *    for($i = 0; $i < $length; $i++) {
- *        $result .= "1234567890abcdef"[rand(0,16)];
- *    }
- *    return $result;
- *}
- */
-
-
-function randomCharacter() {
-	return u(dechex(rand(0,0x2c00)));
-}
-
-function aString($input) {
-	if($input[0] == "a" || $input[0] == "e" || $input[0] == "i" || $input[0] == "o" || $input[0] == "u") {
-		return "an " . $input;
-	} else {
-		return "a " . $input;
-	}
-}
+require_once("../common.php");
 
 function generatePunctuation($amount) {
 	$punctuation = array(
@@ -140,21 +111,12 @@ function generateStatus() {
 	return corrupt(ucfirst($status),rand(0,5));
 }
 
-require_once("TwitterAPIExchange.php");
-
 $logfile = fopen("invest.log","a");
 fwrite($logfile,"\n" . date("d, F Y, H:i:s") . ": " . __FILE__ . " run,");
 
 if(rand(0,1)) {
 	fwrite($logfile," status generated.");
-	$keys = json_decode(fread(fopen("investkeys","r"),filesize("investkeys")));
-	$settings = array(
-		'oauth_access_token' => $keys->access_token,
-		'oauth_access_token_secret' => $keys->access_token_secret,
-		'consumer_key' => $keys->consumer_key,
-		'consumer_secret' => $keys->consumer_secret
-	);
-	$twitter = new TwitterAPIExchange($settings);
+	$twitter = twitterfromkeysfile("bestinvestings.json");
 	fwrite($logfile, " Output: " . $twitter->buildOauth("https://api.twitter.com/1.1/statuses/update.json", "POST")
 		->setPostfields(array(
 			"status" => mb_substr(generateStatus(),0,140)

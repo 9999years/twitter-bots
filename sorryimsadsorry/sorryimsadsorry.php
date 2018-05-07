@@ -1,17 +1,9 @@
 <?php
 //worst practice style guide
 
-//$arrow = "\u{2190}"; //left arrow
+require_once("../common.php");
 
-function searchArgs($string) {
-	global $argv;
-	for($i = 0; $i < count($argv); $i++) {
-		if($argv[$i] == $string) {
-			return true;
-		}
-	}
-	return false;
-}
+//$arrow = "\u{2190}"; //left arrow
 
 $startTime = time();
 mt_srand($startTime);
@@ -264,24 +256,6 @@ $templates = array(
 	,"today is {{MUCH}} {{ARTICLE}} \u{201c}{{EMOTIONS}}\u{201d} day, you know?"
 );
 
-function u($hex) {
-	return json_decode("\"\\u" . $hex . "\"");
-}
-
-function pickRandom($input) {
-	return $input[rand(0,sizeof($input)-1)];
-}
-
-/*
- *function randomCharacter() {
- *    return u(dechex(rand(0,0x2c00)));
- *}
- */
-
-function randomCharacter($string) {
-	return mb_substr($string, rand(0, mb_strlen($string)), 1);
-}
-
 function generateSmiley() {
 	if(rand(0,2) == 0) {
 		$eyes = ":;=B|";
@@ -482,15 +456,7 @@ if(searchArgs("silent")) {
 	die();
 }
 
-require_once("TwitterAPIExchange.php");
-$keys = json_decode(fread(fopen("sadkeys","r"),filesize("sadkeys")));
-$settings = array(
-	'oauth_access_token' => $keys->access_token,
-	'oauth_access_token_secret' => $keys->access_token_secret,
-	'consumer_key' => $keys->consumer_key,
-	'consumer_secret' => $keys->consumer_secret
-);
-$twitter = new TwitterAPIExchange($settings);
+$twitter = twitterfromkeysfile("sorryimsadsorry.json");
 fwrite($logfile, "Output: " . $twitter->buildOauth("https://api.twitter.com/1.1/statuses/update.json", "POST")
 	->setPostfields(array(
 		"status" => mb_substr(generateStatus(),0,140)

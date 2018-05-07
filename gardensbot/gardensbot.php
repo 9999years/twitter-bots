@@ -1,5 +1,5 @@
 <?php
-include_once("common.php");
+include_once("../common.php");
 
 $logfile = fopen("garden.log","a");
 fwrite($logfile,"\n" . date("d F Y, H:i:s") . ": " . __FILE__ . " run,");
@@ -186,20 +186,6 @@ $plants = array(
 	,"\u{1f952}" // Cucumber
 	);
 
-function pickRandom($input) {
-	return $input[random(0,sizeof($input)-1)];
-}
-
-/*
- *function randomCharacter() {
- *    return u(dechex(random(0,0x2c00)));
- *}
- */
-
-function randomCharacter($string) {
-	return mb_substr($string, random(0, mb_strlen($string)), 1);
-}
-
 function fillArray($obj, $iMax, $jMax, $array) {
 	for($i = 0; $i < $iMax; $i++) {
 		for($j = 0; $j < $jMax; $j++) {
@@ -244,17 +230,7 @@ if(searchArgs("silent")) {
 	die();
 }
 
-require_once("TwitterAPIExchange.php");
-
-$keys = json_decode(fread(fopen("gardenkeys","r"),filesize("gardenkeys")));
-
-$settings = array(
-	'oauth_access_token' => $keys->access_token,
-	'oauth_access_token_secret' => $keys->access_token_secret,
-	'consumer_key' => $keys->consumer_key,
-	'consumer_secret' => $keys->consumer_secret
-);
-$twitter = new TwitterAPIExchange($settings);
+$twitter = twitterfromkeysfile("gardensbot.json");
 fwrite($logfile, "Output: " . $twitter->buildOauth("https://api.twitter.com/1.1/statuses/update.json", "POST")
 	->setPostfields(array(
 		"status" => $status
