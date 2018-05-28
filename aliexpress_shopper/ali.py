@@ -240,6 +240,9 @@ def info(productIdOrUrl):
     if not productIdOrUrl.startswith('http'):
         productIdOrUrl = url(productIdOrUrl)
 
+    if 'sec.aliexpress.com' in productIdOrUrl:
+        raise ValueError('rate limit hit; login requested')
+
     pg = sess.get(productIdOrUrl)
     if not pg.ok:
         raise ValueError('requesting page failed')
