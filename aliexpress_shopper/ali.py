@@ -1,6 +1,8 @@
-import requests
 import random
 from urllib.parse import urljoin
+import re
+
+import requests
 
 blacklist = [
     'weight loss',
@@ -61,14 +63,66 @@ def next(item, store, company, **kwargs):
     fn = random.choice(types)
     return random.choice(fn(item=item, store=store, company=company, **kwargs))
 
-def seed():
-    ret = random.choice(recommended())
-    return { 'id': ret['productId'],
-        'title': ret['productTitle'],
-        'price': (ret['minPrice'], ret['maxPrice']),
-        'img': ret['productImage'],
-        'url': ret['productDetailUrl'],
+def url(item):
+    dat = {
+        'searchText': item
     }
+    req = requests.get('https://www.aliexpress.com/wholesale', params=dat, allow_redirects=False)
+
+    if 'location' in req.headers:
+        return req.headers['location']
+    else:
+        return req.url
+
+def info(item):
+    """
+    product info from a url
+    """
+
+    if not item.startswith('http'):
+        item = url(item)
+
+    pg = requests.get(item)
+    if not pg.ok:
+        raise ValueError('requesting page failed')
+    pg = pg.text
+
+    def getParam(name, pat=r'\d+'):
+        nonlocal pg
+        match = re.search(f'window\\.runParams\\.{name}="({pat})";', pg)
+        if match:
+            return match.group(1)
+        else:
+            return None
+
+    ret = {}
+
+    ret['item']    = getParam('productId')
+    ret['shop']    = getParam('shopId')
+    ret['company'] = getParam('companyId')
+
+    ret['category']       = getParam('categoryId')
+    ret['topCategory']    = getParam('topCategoryId')
+    ret['secondCategory'] = getParam('secondLevelCategoryId')
+    ret['orders']         = getParam('productTradeCount')
+
+    def tagContents(tag, attribs='', inner='[^<]+'):
+        nonlocal pg
+
+        search = '<' + tag
+        if attribs:
+            search += ' ' + attribs
+        search += f'>({inner})</{tag}>'
+
+        match = re.search(search, pg)
+        if match:
+            return match.group(1)
+        else:
+            return None
+
+    ret['title'] = tagContents('h1', 'class="product-name" itemprop="name"')
+    # ret['price'] = getParam('baseCurrencySymbol') + getParam('minPrice')
+    return ret
 
 def main():
     pass
