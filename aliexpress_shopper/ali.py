@@ -12,16 +12,47 @@ blacklist = [
     'fat burning',
 ]
 
+# TODO put this in a sep. file?
+keywords = [
+    'Soil',
+    'Hygrometer',
+    'Humidity',
+    'Detection',
+    'Module',
+    'Moisture',
+    'Water',
+    'Sensor',
+    'Soil',
+    'moisture',
+    'Arduino',
+    'shoes',
+    'sweater',
+    'dress',
+    'enamel pin',
+    'patch',
+    'technology',
+    'pen',
+    'cute',
+    'backpack',
+    'stylish',
+    'component',
+]
+
 root = 'https://www.aliexpress.com/'
 
 def rel2abs(page, dom=root):
     return urljoin(dom, page)
 
 def els2attrs(els, attr='href', listify=True, process=None):
-    if process is not None:
-        fn = lambda e: process(e.attrs[attr])
-    else:
-        fn = lambda e: e.attrs[attr]
+    def fn(e):
+        nonlocal process, attr
+        if attr in e:
+            ret = e.attrs[attr]
+        else:
+            raise ValueError(attr + ' not in ' + e)
+        if process is not None:
+            ret = process(ret)
+        return ret
 
     mapped = map(fn, els)
 
@@ -30,12 +61,33 @@ def els2attrs(els, attr='href', listify=True, process=None):
     else:
         return mapped
 
+def identity(item):
+    if 'item' in item:
+        ret = {
+            'item':     item['item']    if 'item'    in item else None,
+            'store':    item['store']   if 'store'   in item else None,
+            'company':  item['company'] if 'company' in item else None,
+        }
+    else:
+        ret = {
+            'item':     item['productId'] if 'productId' in item else None,
+            'store':    item['shopId']    if 'shopId'    in item else None,
+            'company':  item['companyId'] if 'companyId' in item else None,
+        }
+
+    for k in ret:
+        ret[k] = str(ret[k])
+
+    ret.update(info(ret['item']))
+
+    return ret
+
 def get(url, dat, resultsKey = 'results'):
     global sess
     ret = sess.get(url, params=dat)
     if ret.ok:
         jret = ret.json()
-        if 'results' in jret:
+        if resultsKey in jret:
             return jret[resultsKey]
         else:
             raise ValueError(jret)
@@ -63,26 +115,29 @@ def gps(**kwargs):
     # like recommend() for the queryGpsProductAjax.do endpoint
     return recommend(page='queryGpsProductAjax.do', resultsKey='gpsProductDetails', **kwargs)
 
-def searchResults(url):
+def searchResults(url, params):
     """
     given a search page url, returns a list of product urls on that page
     """
     global sess, root
 
-    req = sess.get(url)
+    req = sess.get(url, params=params)
     if not req.ok:
         raise ValueError(req.status_code)
 
     pg = BeautifulSoup(req.text, 'html.parser')
     links = pg.findAll('a', { 'class': 'product' })
-    return els2attrs(ls, lambda href: urljoin(root, href), listify=True)
+    return els2attrs(links, process=lambda href: urljoin(root, href), listify=True)
 
-def search(page, domain=root, **kwargs):
-    return searchResults(urljoin(domain, page), **kwargs)
+def stringSearch(query):
+    dat = {
+        'SearchText': query
+    }
+    return searchResults(rel2abs('wholesale'), dat)
 
 # recommended products from a given product
 
-def searches(item, **kwargs):
+def searches(item):
     """
     recommended searches for a given product
     """
@@ -129,15 +184,32 @@ def under5(**kwargs):
 def moreToLove(**kwargs):
     return gps(widget_id='5347592', **kwargs)
 
+def search(keywords=keywords):
+    items = stringSearch(random.choice(keywords))
+    return info(random.choice(items))
+
+def seed():
+    fns = [flashDeals, under5, moreToLove, search]
+    items = random.choice(fns)()
+    return random.choice(items)
+
 # processing fns; non-generating
 
-def next(item, store, company, **kwargs):
+def nextDirect(item, store, company, **kwargs):
     """
-    next product to "browse" from a given one
+    next product to "browse" from a given one via direct product-to-product links
     """
     types = [thisSeller, otherSeller, topSelling, trending]
     fn = random.choice(types)
     return random.choice(fn(item=item, store=store, company=company, **kwargs))
+
+def nextIndirect(item):
+    """
+    next product to "browse" from a given one via searches
+    """
+    searchUrls = searches(item)
+    items = searchResults(random.choice(searchUrls))
+    return info(random.choice(item))
 
 def url(item):
     """
@@ -197,15 +269,15 @@ def info(item):
 
     ret = {}
 
-    ret['item']    = getParam('productId')
-    ret['shop']    = getParam('shopId')
-    ret['company'] = getParam('companyId')
+    ret['productId'] = getParam('productId')
+    ret['shopId']    = getParam('shopId')
+    ret['companyId'] = getParam('companyId')
 
-    ret['category']       = getParam('categoryId')
-    ret['topCategory']    = getParam('topCategoryId')
-    ret['secondCategory'] = getParam('secondLevelCategoryId')
-    ret['orderCount']     = getParam('productTradeCount')
-    ret['adminSeq']       = getParam('adminSeq')
+    ret['categoryId']            = getParam('categoryId')
+    ret['topCategoryId']         = getParam('topCategoryId')
+    ret['secondLevelCategoryId'] = getParam('secondLevelCategoryId')
+    ret['orderCount']            = getParam('productTradeCount')
+    ret['adminSeq']              = getParam('adminSeq')
 
     ret['title'] = tagContents('h1', 'class="product-name" itemprop="name"')
     ret['price'] = getParam('baseCurrencySymbol')
