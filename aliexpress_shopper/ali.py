@@ -49,7 +49,7 @@ def rel2abs(page, dom=root):
 def els2attrs(els, attr='href', listify=True, process=None):
     def fn(e):
         nonlocal process, attr
-        if attr in e:
+        if attr in e.attrs:
             ret = e.attrs[attr]
         else:
             raise ValueError(attr + ' not in ' + e)
@@ -69,7 +69,7 @@ def identity(item, fetchInfo=True):
     # dict subset; https://stackoverflow.com/a/5352630/5719760
     ret = {k: str(item[k]) for k in item.keys() & keep}
     if fetchInfo:
-        ret.update(info(ret['item']))
+        ret.update(info(ret['productId']))
     return ret
 
 def get(url, dat, resultsKey = 'results'):
@@ -80,23 +80,31 @@ def get(url, dat, resultsKey = 'results'):
         if resultsKey in jret:
             return jret[resultsKey]
         else:
-            raise ValueError(jret)
+            raise ValueError(f'{jret}; {dat}')
     else:
         raise ValueError(ret.text)
 
-def recommend(limit=20, imageSize='1280x1280', productId='', categoryId='', companyId='', shopId='', recommendType='', scenario='', domain='https://gpsfront.aliexpress.com', page='getI2iRecommendingResults.do', resultsKey='results', **kwargs):
+def recommend(limit=20, imageSize='1280x1280', productId=None, categoryId=None, companyId=None, shopId=None, recommendType=None, scenario=None, domain='https://gpsfront.aliexpress.com', page='getI2iRecommendingResults.do', resultsKey='results', **kwargs):
     url = urljoin(domain, page)
 
     dat = {
-        'recommendType': recommendType,
-        'scenario': scenario,
         'limit': limit,
         'imageSize': imageSize,
+    }
+
+    maybeKeys = {
+        'recommendType': recommendType,
+        'scenario': scenario,
         'currentItemList': productId,
         'categoryId': categoryId,
         'companyId': companyId,
         'shopId': shopId,
+        'storeId': shopId, # ???
     }
+
+    for k, v in maybeKeys.items():
+        if v is not None:
+            dat[k] = v
 
     dat.update(kwargs)
     return get(url, dat, resultsKey=resultsKey)
@@ -105,13 +113,16 @@ def gps(**kwargs):
     # like recommend() for the queryGpsProductAjax.do endpoint
     return recommend(page='queryGpsProductAjax.do', resultsKey='gpsProductDetails', **kwargs)
 
-def searchResults(url, params):
+def searchResults(url, params=None):
     """
     given a search page url, returns a list of product urls on that page
     """
     global sess, root
 
-    req = sess.get(url, params=params)
+    if params is None:
+        req = sess.get(url)
+    else:
+        req = sess.get(url, params=params)
     if not req.ok:
         raise ValueError(req.status_code)
 
@@ -139,7 +150,7 @@ def searches(productId):
     req = sess.get(rel2abs('/seo/detailCrosslinkAjax.htm'), params=dat)
 
     if not req.ok:
-        raise ValueError(req)
+        raise ValueError(f'{req.status_code}; {dat}')
 
     pg = BeautifulSoup(req.text, 'html.parser')
 
@@ -164,9 +175,10 @@ def trending(**kwargs):
     return recommend(scenario='pcDetailLeftTrendProduct', **kwargs)
 
 # seed functions; product lists from nothing
+# NOTE: widget_id values might not be consistent
 
 def flashDeals(**kwargs):
-    return gps(widget_id='5063238', **kwargs)
+    return gps(widget_id='5041187', **kwargs)
 
 def under5(**kwargs):
     return gps(widget_id='5295841', **kwargs)
@@ -176,11 +188,12 @@ def moreToLove(**kwargs):
 
 def search(keywords=keywords):
     items = stringSearch(random.choice(keywords))
-    return info(random.choice(items))
+    return [info(random.choice(items))]
 
 def seed():
     fns = [flashDeals, under5, moreToLove, search]
-    items = random.choice(fns)()
+    fn = random.choice(fns)
+    items = fn()
     return random.choice(items)
 
 # processing fns; non-generating
@@ -199,7 +212,7 @@ def nextIndirect(productId):
     """
     searchUrls = searches(productId)
     items = searchResults(random.choice(searchUrls))
-    return info(random.choice(productId))
+    return info(random.choice(items))
 
 def url(productId):
     """
@@ -222,6 +235,8 @@ def info(productIdOrUrl):
     """
     global sess
 
+    productIdOrUrl = str(productIdOrUrl)
+
     if not productIdOrUrl.startswith('http'):
         productIdOrUrl = url(productIdOrUrl)
 
@@ -232,7 +247,7 @@ def info(productIdOrUrl):
 
     def getParam(name, pat=r'\d+'):
         nonlocal pg
-        match = re.search(f'window\\.runParams\\.{name}="({pat})";', pg)
+        match = re.search(f'window\\.runParams\\.{name} ?= ?"({pat})";', pg)
         if match:
             return match.group(1)
         else:
@@ -263,12 +278,14 @@ def info(productIdOrUrl):
     ret['shopId']    = getParam('shopId')
     ret['companyId'] = getParam('companyId')
 
+    ret['productImage']          = getParam('mainBigPic', pat='[^"]+')
     ret['categoryId']            = getParam('categoryId')
     ret['topCategoryId']         = getParam('topCategoryId')
     ret['secondLevelCategoryId'] = getParam('secondLevelCategoryId')
     ret['orderCount']            = getParam('productTradeCount')
     ret['adminSeq']              = getParam('adminSeq')
 
+    ret['productDetailUrl'] = productIdOrUrl
     ret['title'] = tagContents('h1', 'class="product-name" itemprop="name"')
     ret['price'] = getParam('baseCurrencySymbol')
     if ret['price']:
