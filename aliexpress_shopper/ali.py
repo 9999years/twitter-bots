@@ -40,6 +40,9 @@ keywords = [
 
 root = 'https://www.aliexpress.com/'
 
+# in general, `item` denotes a dict with productId, etc. keys, and `productId`
+# denotes a unique aliexpress-supplied key for a product
+
 def rel2abs(page, dom=root):
     return urljoin(dom, page)
 
@@ -61,25 +64,12 @@ def els2attrs(els, attr='href', listify=True, process=None):
     else:
         return mapped
 
-def identity(item):
-    if 'item' in item:
-        ret = {
-            'item':     item['item']    if 'item'    in item else None,
-            'store':    item['store']   if 'store'   in item else None,
-            'company':  item['company'] if 'company' in item else None,
-        }
-    else:
-        ret = {
-            'item':     item['productId'] if 'productId' in item else None,
-            'store':    item['shopId']    if 'shopId'    in item else None,
-            'company':  item['companyId'] if 'companyId' in item else None,
-        }
-
-    for k in ret:
-        ret[k] = str(ret[k])
-
-    ret.update(info(ret['item']))
-
+def identity(item, fetchInfo=True):
+    keep = {'productId', 'shopId', 'companyId'}
+    # dict subset; https://stackoverflow.com/a/5352630/5719760
+    ret = {k: str(item[k]) for k in item.keys() & keep}
+    if fetchInfo:
+        ret.update(info(ret['item']))
     return ret
 
 def get(url, dat, resultsKey = 'results'):
@@ -94,18 +84,18 @@ def get(url, dat, resultsKey = 'results'):
     else:
         raise ValueError(ret.text)
 
-def recommend(amount=20, imageSize='1280x1280', item='', category='', company='', shop='', recType='', scenario='', domain='https://gpsfront.aliexpress.com', page='getI2iRecommendingResults.do', resultsKey='results', **kwargs):
+def recommend(limit=20, imageSize='1280x1280', productId='', categoryId='', companyId='', shopId='', recommendType='', scenario='', domain='https://gpsfront.aliexpress.com', page='getI2iRecommendingResults.do', resultsKey='results', **kwargs):
     url = urljoin(domain, page)
 
     dat = {
-        'recommendType': recType,
+        'recommendType': recommendType,
         'scenario': scenario,
-        'limit': amount,
+        'limit': limit,
         'imageSize': imageSize,
-        'currentItemList': item,
-        'categoryId': category,
-        'companyId': company,
-        'shopId': shop,
+        'currentItemList': productId,
+        'categoryId': categoryId,
+        'companyId': companyId,
+        'shopId': shopId,
     }
 
     dat.update(kwargs)
@@ -137,14 +127,14 @@ def stringSearch(query):
 
 # recommended products from a given product
 
-def searches(item):
+def searches(productId):
     """
     recommended searches for a given product
     """
     global sess
 
     dat = {
-        'productId': item
+        'productId': productId
     }
     req = sess.get(rel2abs('/seo/detailCrosslinkAjax.htm'), params=dat)
 
@@ -156,13 +146,13 @@ def searches(item):
     return els2attrs(pg.findAll('a'))
 
 def thisSeller(**kwargs):
-    return recommend(recType='toMine', scenario='pcDetailBottomMoreThisSeller')
+    return recommend(recommendType='toMine', scenario='pcDetailBottomMoreThisSeller')
 
 def otherSeller(**kwargs):
     """
     requires: item, shop, or company
     """
-    return recommend(recType='toOtherSeller', scenario='pcDetailBottomMoreOtherSeller', **kwargs)
+    return recommend(recommendType='toOtherSeller', scenario='pcDetailBottomMoreOtherSeller', **kwargs)
 
 def topSelling(**kwargs):
     """
@@ -195,29 +185,29 @@ def seed():
 
 # processing fns; non-generating
 
-def nextDirect(item, store, company, **kwargs):
+def nextDirect(productId, shopId, companyId, **kwargs):
     """
     next product to "browse" from a given one via direct product-to-product links
     """
     types = [thisSeller, otherSeller, topSelling, trending]
     fn = random.choice(types)
-    return random.choice(fn(item=item, store=store, company=company, **kwargs))
+    return random.choice(fn(productId=productId, shopId=shopId, companyId=companyId, **kwargs))
 
-def nextIndirect(item):
+def nextIndirect(productId):
     """
     next product to "browse" from a given one via searches
     """
-    searchUrls = searches(item)
+    searchUrls = searches(productId)
     items = searchResults(random.choice(searchUrls))
-    return info(random.choice(item))
+    return info(random.choice(productId))
 
-def url(item):
+def url(productId):
     """
     gets an absolute url for a given item id
     """
     global sess
     dat = {
-        'searchText': item
+        'searchText': productId
     }
     req = sess.get(rel2abs('/wholesale'), params=dat, allow_redirects=False)
 
@@ -226,16 +216,16 @@ def url(item):
     else:
         return req.url
 
-def info(item):
+def info(productIdOrUrl):
     """
     product info from a url
     """
     global sess
 
-    if not item.startswith('http'):
-        item = url(item)
+    if not productIdOrUrl.startswith('http'):
+        productIdOrUrl = url(productIdOrUrl)
 
-    pg = sess.get(item)
+    pg = sess.get(productIdOrUrl)
     if not pg.ok:
         raise ValueError('requesting page failed')
     pg = pg.text
